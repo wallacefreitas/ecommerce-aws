@@ -1,21 +1,103 @@
 #!/usr/bin/env node
 import 'source-map-support/register';
 import * as cdk from 'aws-cdk-lib';
-import { EcommerceAwsStack } from '../lib/ecommerce-aws-stack';
+import { ProductsAppStack } from '../lib/productsApp-stack';
+import { EcommerceApiStack } from '../lib/ecommerceApi-stack';
+import { ProductsAppLayersStack } from '../lib/productsAppLayers-stack';
+import { EventsDBStack } from '../lib/eventsDB-stack';
+import { OrdersAppStack } from '../lib/ordersApp-stack';
+import { OrdersAppLayersStack } from '../lib/ordersAppLayers-stack';
+import { InvoiceWSApiStack } from '../lib/invoiceWSApi-stack';
+import { InvoicesAppLayersStack } from '../lib/invoicesAppLayers-stack';
+import { AuditEventBusStack } from '../lib/auditEventBus-stack';
 
 const app = new cdk.App();
-new EcommerceAwsStack(app, 'EcommerceAwsStack', {
-  /* If you don't specify 'env', this stack will be environment-agnostic.
-   * Account/Region-dependent features and context lookups will not work,
-   * but a single synthesized template can be deployed anywhere. */
 
-  /* Uncomment the next line to specialize this stack for the AWS Account
-   * and Region that are implied by the current CLI configuration. */
-  // env: { account: process.env.CDK_DEFAULT_ACCOUNT, region: process.env.CDK_DEFAULT_REGION },
+const env: cdk.Environment = {
+  account: process.env.CDK_AWS_ACCOUNT,
+  region: process.env.CDK_AWS_REGION
+};
 
-  /* Uncomment the next line if you know exactly what Account and Region you
-   * want to deploy the stack to. */
-  // env: { account: '123456789012', region: 'us-east-1' },
+const tags = {
+  cost: "Ecommerce",
+  team: "Developer"
+};
 
-  /* For more information, see https://docs.aws.amazon.com/cdk/latest/guide/environments.html */
+const auditEventBus = new AuditEventBusStack(app, "AuditEvents", {
+  tags: {
+    cost: "Audit",
+    team: "Developer"
+  },
+  env
+})
+
+const productsAppLayersStack = new ProductsAppLayersStack(app, "ProductsAppLayers", {
+  tags,
+  env
+})
+
+const eventsDBStack = new EventsDBStack(app, "EventsDB", {
+  tags,
+  env
 });
+
+const productsAppStack = new ProductsAppStack(app, "ProductsApp", {
+  tags,
+  env,
+  eventsDB: eventsDBStack.table,
+});
+
+productsAppStack.addDependency(productsAppLayersStack);
+productsAppStack.addDependency(eventsDBStack);
+
+const ordersAppLayersStack = new OrdersAppLayersStack(app, "OrdersAppLayers", {
+  tags,
+  env
+});
+
+const ordersAppStack = new OrdersAppStack(app, "OrdersApp", {
+  tags,
+  env,
+  productsDB: productsAppStack.productsTable,
+  eventsDB: eventsDBStack.table,
+  auditBus: auditEventBus.bus
+});
+
+ordersAppStack.addDependency(productsAppStack);
+ordersAppStack.addDependency(ordersAppLayersStack);
+ordersAppStack.addDependency(eventsDBStack);
+ordersAppStack.addDependency(auditEventBus);
+
+const eCommerceApiStack = new EcommerceApiStack(app, "EcommerceApi", {
+  productsFetchHandler: productsAppStack.productsFetchHandler,
+  productsAdminHandler: productsAppStack.productsAdminHandler,
+  ordersHandler: ordersAppStack.ordersHandler,
+  orderEventsFetchHandler: ordersAppStack.orderEventsFetchHandler,
+  tags,
+  env
+});
+
+eCommerceApiStack.addDependency(productsAppStack);
+eCommerceApiStack.addDependency(ordersAppStack);
+
+const invoicesAppLayersStack = new InvoicesAppLayersStack(app, "InvoicesAppLayer", {
+  tags: {
+    cost: "InvoiceApp",
+    team: "Developer"
+  },
+  env 
+})
+
+const invoiceWSApiStack = new InvoiceWSApiStack(app, "InvoiceApi", {
+  eventsDB: eventsDBStack.table,
+  tags: {
+    cost: "InvoiceApp",
+    team: "Developer"
+  },
+  env,
+  auditBus: auditEventBus.bus
+});
+
+invoiceWSApiStack.addDependency(invoicesAppLayersStack);
+invoiceWSApiStack.addDependency(eventsDBStack);
+invoiceWSApiStack.addDependency(auditEventBus);
