@@ -1,4 +1,4 @@
-import * as lambda from 'aws-cdk-lib/aws-lambda';
+import * as lambda from "aws-cdk-lib/aws-lambda";
 import * as lambdaNodeJS from "aws-cdk-lib/aws-lambda-nodejs";
 import * as cdk from "aws-cdk-lib";
 import * as dynamodb from "aws-cdk-lib/aws-dynamodb";
@@ -31,21 +31,21 @@ export class OrdersAppStack extends cdk.Stack {
       tableName: "orders",
       partitionKey: {
         name: "pk",
-        type: dynamodb.AttributeType.STRING
+        type: dynamodb.AttributeType.STRING,
       },
       sortKey: {
         name: "sk",
-        type: dynamodb.AttributeType.STRING
+        type: dynamodb.AttributeType.STRING,
       },
       billingMode: dynamodb.BillingMode.PROVISIONED,
       readCapacity: 1,
-      writeCapacity: 1
+      writeCapacity: 1,
     });
 
-    const writeThrottleEventsMetric = ordersDB.metric('WriteThrottleEvents', {
+    const writeThrottleEventsMetric = ordersDB.metric("WriteThrottleEvents", {
       period: cdk.Duration.minutes(2),
       statistic: "SampleCount",
-      unit: cw.Unit.COUNT
+      unit: cw.Unit.COUNT,
     });
 
     writeThrottleEventsMetric.createAlarm(this, "WriteThrottleEventsAlarm", {
@@ -53,33 +53,86 @@ export class OrdersAppStack extends cdk.Stack {
       actionsEnabled: false,
       evaluationPeriods: 1,
       threshold: 25,
-      comparisonOperator: cw.ComparisonOperator.GREATER_THAN_OR_EQUAL_TO_THRESHOLD,
-      treatMissingData: cw.TreatMissingData.NOT_BREACHING
-    })
+      comparisonOperator:
+        cw.ComparisonOperator.GREATER_THAN_OR_EQUAL_TO_THRESHOLD,
+      treatMissingData: cw.TreatMissingData.NOT_BREACHING,
+    });
 
-    const ordersLayerArn = ssm.StringParameter.valueForStringParameter(this, "OrdersLayerVersionArn");
-    const ordersLayer = lambda.LayerVersion.fromLayerVersionArn(this, "OrdersLayerVersionArn", ordersLayerArn); 
+    const ordersLayerArn = ssm.StringParameter.valueForStringParameter(
+      this,
+      "OrdersLayerVersionArn"
+    );
 
-    const ordersApiLayerArn = ssm.StringParameter.valueForStringParameter(this, "OrdersApiLayerVersionArn");
-    const ordersApiLayer = lambda.LayerVersion.fromLayerVersionArn(this, "OrdersApiLayerVersionArn", ordersApiLayerArn); 
+    const ordersLayer = lambda.LayerVersion.fromLayerVersionArn(
+      this,
+      "OrdersLayerVersionArn",
+      ordersLayerArn
+    );
 
-    const orderEventsLayerArn = ssm.StringParameter.valueForStringParameter(this, "OrderEventsLayerVersionArn");
-    const orderEventsLayer = lambda.LayerVersion.fromLayerVersionArn(this, "OrderEventsLayerVersionArn", orderEventsLayerArn); 
+    const ordersApiLayerArn = ssm.StringParameter.valueForStringParameter(
+      this,
+      "OrdersApiLayerVersionArn"
+    );
 
-    const orderEventsRepositoryLayerArn = ssm.StringParameter.valueForStringParameter(this, "OrderEventsRepositoryLayerVersionArn");
-    const orderEventsRepositoryLayer = lambda.LayerVersion.fromLayerVersionArn(this, "OrderEventsRepositoryLayerVersionArn", orderEventsRepositoryLayerArn); 
+    const ordersApiLayer = lambda.LayerVersion.fromLayerVersionArn(
+      this,
+      "OrdersApiLayerVersionArn",
+      ordersApiLayerArn
+    );
 
-    const productsLayerArn = ssm.StringParameter.valueForStringParameter(this, "ProductsLayerVersionArn");
-    const productsLayer = lambda.LayerVersion.fromLayerVersionArn(this, "ProductsLayerVersionArn", productsLayerArn); 
+    const orderEventsLayerArn = ssm.StringParameter.valueForStringParameter(
+      this,
+      "OrderEventsLayerVersionArn"
+    );
+
+    const orderEventsLayer = lambda.LayerVersion.fromLayerVersionArn(
+      this,
+      "OrderEventsLayerVersionArn",
+      orderEventsLayerArn
+    );
+
+    const orderEventsRepositoryLayerArn =
+      ssm.StringParameter.valueForStringParameter(
+        this,
+        "OrderEventsRepositoryLayerVersionArn"
+      );
+
+    const orderEventsRepositoryLayer = lambda.LayerVersion.fromLayerVersionArn(
+      this,
+      "OrderEventsRepositoryLayerVersionArn",
+      orderEventsRepositoryLayerArn
+    );
+
+    const productsLayerArn = ssm.StringParameter.valueForStringParameter(
+      this,
+      "ProductsLayerVersionArn"
+    );
+
+    const productsLayer = lambda.LayerVersion.fromLayerVersionArn(
+      this,
+      "ProductsLayerVersionArn",
+      productsLayerArn
+    );
+
+    const authUserInfoLayerArn = ssm.StringParameter.valueForStringParameter(
+      this,
+      "AuthUserInfoLayerVersionArn"
+    );
+
+    const authUserInfoLayer = lambda.LayerVersion.fromLayerVersionArn(
+      this,
+      "AuthUserInfoLayerVersionArn",
+      authUserInfoLayerArn
+    );
 
     const ordersTopic = new sns.Topic(this, "OrderEventsTopic", {
       displayName: "Order Events Topic",
-      topicName: "order-events"
+      topicName: "order-events",
     });
 
     this.ordersHandler = new lambdaNodeJS.NodejsFunction(
-      this, 
-      "OrdersFunction", 
+      this,
+      "OrdersFunction",
       {
         runtime: lambda.Runtime.NODEJS_20_X,
         functionName: "OrdersFunction",
@@ -89,17 +142,23 @@ export class OrdersAppStack extends cdk.Stack {
         timeout: cdk.Duration.seconds(2),
         bundling: {
           minify: true,
-          sourceMap: false
+          sourceMap: false,
         },
         environment: {
           PRODUCTS_TABLE: props.productsDB.tableName,
           ORDERS_TABLE: ordersDB.tableName,
           ORDER_EVENTS_TOPIC_ARN: ordersTopic.topicArn,
-          AUDIT_BUS_NAME: props.auditBus.eventBusName
+          AUDIT_BUS_NAME: props.auditBus.eventBusName,
         },
-        layers: [ordersLayer, ordersApiLayer, orderEventsLayer, productsLayer],
+        layers: [
+          ordersLayer,
+          ordersApiLayer,
+          orderEventsLayer,
+          productsLayer,
+          authUserInfoLayer,
+        ],
         tracing: lambda.Tracing.ACTIVE,
-        insightsVersion: lambda.LambdaInsightsVersion.VERSION_1_0_119_0
+        //insightsVersion: lambda.LambdaInsightsVersion.VERSION_1_0_119_0,
       }
     );
 
@@ -108,38 +167,45 @@ export class OrdersAppStack extends cdk.Stack {
     ordersTopic.grantPublish(this.ordersHandler);
     props.auditBus.grantPutEventsTo(this.ordersHandler);
 
-    const productNotFoundMetricFilter = this.ordersHandler.logGroup.addMetricFilter('ProductNotFoundMetric', {
-      metricName: "OrderWithNonValidProduct",
-      metricNamespace: "ProductNotFound",
-      filterPattern: logs.FilterPattern.literal('Some product was not found')
-    });
+    const productNotFoundMetricFilter =
+      this.ordersHandler.logGroup.addMetricFilter("ProductNotFoundMetric", {
+        metricName: "OrderWithNonValidProduct",
+        metricNamespace: "ProductNotFound",
+        filterPattern: logs.FilterPattern.literal("Some product was not found"),
+      });
 
     const productNotFoundAlarm = productNotFoundMetricFilter
       .metric()
       .with({
-        statistic: 'Sum',
-        period: cdk.Duration.minutes(2)
+        statistic: "Sum",
+        period: cdk.Duration.minutes(2),
       })
-      .createAlarm(this, 'ProductNotFoundAlarm', {
+      .createAlarm(this, "ProductNotFoundAlarm", {
         alarmName: "OrderWithNonValidProduct",
-        alarmDescription: "Some product was not found while creating a new order",
+        alarmDescription:
+          "Some product was not found while creating a new order",
         evaluationPeriods: 1,
         threshold: 2,
         actionsEnabled: true,
-        comparisonOperator: cw.ComparisonOperator.GREATER_THAN_OR_EQUAL_TO_THRESHOLD
+        comparisonOperator:
+          cw.ComparisonOperator.GREATER_THAN_OR_EQUAL_TO_THRESHOLD,
       });
-    
+
     const orderAlarmsTopic = new sns.Topic(this, "OrderAlarmsTopic", {
       displayName: "Order alarms topic",
-      topicName: "order-alarms"
-    })
+      topicName: "order-alarms",
+    });
 
-    orderAlarmsTopic.addSubscription(new subs.EmailSubscription(process.env.CDK_AWS_SNS_EMAIL_SUBSCRIPTION!));
-    productNotFoundAlarm.addAlarmAction(new cw_actions.SnsAction(orderAlarmsTopic));
-    
+    orderAlarmsTopic.addSubscription(
+      new subs.EmailSubscription(process.env.CDK_AWS_SNS_EMAIL_SUBSCRIPTION!)
+    );
+    productNotFoundAlarm.addAlarmAction(
+      new cw_actions.SnsAction(orderAlarmsTopic)
+    );
+
     const orderEventsHandler = new lambdaNodeJS.NodejsFunction(
-      this, 
-      "OrderEventsFunction", 
+      this,
+      "OrderEventsFunction",
       {
         runtime: lambda.Runtime.NODEJS_20_X,
         functionName: "OrderEventsFunction",
@@ -149,18 +215,20 @@ export class OrdersAppStack extends cdk.Stack {
         timeout: cdk.Duration.seconds(2),
         bundling: {
           minify: true,
-          sourceMap: false
+          sourceMap: false,
         },
         environment: {
           EVENTS_DB: props.eventsDB.tableName,
         },
         layers: [orderEventsLayer, orderEventsRepositoryLayer],
         tracing: lambda.Tracing.ACTIVE,
-        insightsVersion: lambda.LambdaInsightsVersion.VERSION_1_0_119_0
+        insightsVersion: lambda.LambdaInsightsVersion.VERSION_1_0_119_0,
       }
     );
 
-    ordersTopic.addSubscription(new subs.LambdaSubscription(orderEventsHandler));
+    ordersTopic.addSubscription(
+      new subs.LambdaSubscription(orderEventsHandler)
+    );
 
     const eventsDBPolicy = new iam.PolicyStatement({
       effect: iam.Effect.ALLOW,
@@ -168,16 +236,16 @@ export class OrdersAppStack extends cdk.Stack {
       resources: [props.eventsDB.tableArn],
       conditions: {
         ["ForAllValues:StringLike"]: {
-          "dynamodb:LeadingKeys": ["#order_*"]
-        }
-      }
+          "dynamodb:LeadingKeys": ["#order_*"],
+        },
+      },
     });
 
     orderEventsHandler.addToRolePolicy(eventsDBPolicy);
 
     const billingHandler = new lambdaNodeJS.NodejsFunction(
-      this, 
-      "BillingFunction", 
+      this,
+      "BillingFunction",
       {
         runtime: lambda.Runtime.NODEJS_20_X,
         functionName: "BillingFunction",
@@ -187,26 +255,28 @@ export class OrdersAppStack extends cdk.Stack {
         timeout: cdk.Duration.seconds(2),
         bundling: {
           minify: true,
-          sourceMap: false
+          sourceMap: false,
         },
         tracing: lambda.Tracing.ACTIVE,
-        insightsVersion: lambda.LambdaInsightsVersion.VERSION_1_0_119_0
+        insightsVersion: lambda.LambdaInsightsVersion.VERSION_1_0_119_0,
       }
     );
 
-    ordersTopic.addSubscription(new subs.LambdaSubscription(billingHandler, {
-      filterPolicy: {
-        eventType: sns.SubscriptionFilter.stringFilter({
-          allowlist: ['ORDER_CREATED']
-        })
-      }
-    }))
+    ordersTopic.addSubscription(
+      new subs.LambdaSubscription(billingHandler, {
+        filterPolicy: {
+          eventType: sns.SubscriptionFilter.stringFilter({
+            allowlist: ["ORDER_CREATED"],
+          }),
+        },
+      })
+    );
 
     const orderEventsDlq = new sqs.Queue(this, "OrderEventsDlq", {
       queueName: "order-events-dlq",
       enforceSSL: false,
       encryption: sqs.QueueEncryption.UNENCRYPTED,
-      retentionPeriod: cdk.Duration.days(10)
+      retentionPeriod: cdk.Duration.days(10),
     });
 
     const orderEventsQueue = new sqs.Queue(this, "OrderEventsQueue", {
@@ -215,21 +285,23 @@ export class OrdersAppStack extends cdk.Stack {
       encryption: sqs.QueueEncryption.UNENCRYPTED,
       deadLetterQueue: {
         maxReceiveCount: 3,
-        queue: orderEventsDlq
-      }
+        queue: orderEventsDlq,
+      },
     });
 
-    ordersTopic.addSubscription(new subs.SqsSubscription(orderEventsQueue, {
-      filterPolicy: {
-        eventType: sns.SubscriptionFilter.stringFilter({
-          allowlist: ['ORDER_CREATED']
-        })
-      }
-    }));
+    ordersTopic.addSubscription(
+      new subs.SqsSubscription(orderEventsQueue, {
+        filterPolicy: {
+          eventType: sns.SubscriptionFilter.stringFilter({
+            allowlist: ["ORDER_CREATED"],
+          }),
+        },
+      })
+    );
 
     const orderEmailsHandler = new lambdaNodeJS.NodejsFunction(
-      this, 
-      "OrderEmailsFunction", 
+      this,
+      "OrderEmailsFunction",
       {
         runtime: lambda.Runtime.NODEJS_20_X,
         functionName: "OrderEmailsFunction",
@@ -239,33 +311,35 @@ export class OrdersAppStack extends cdk.Stack {
         timeout: cdk.Duration.seconds(2),
         bundling: {
           minify: true,
-          sourceMap: false
+          sourceMap: false,
         },
         layers: [orderEventsLayer],
         tracing: lambda.Tracing.ACTIVE,
-        insightsVersion: lambda.LambdaInsightsVersion.VERSION_1_0_119_0
+        insightsVersion: lambda.LambdaInsightsVersion.VERSION_1_0_119_0,
       }
     );
 
-    orderEmailsHandler.addEventSource(new lambdaEventSource.SqsEventSource(orderEventsQueue, {
-      batchSize: 5,
-      enabled: true,
-      maxBatchingWindow: cdk.Duration.minutes(1)
-    }));
+    orderEmailsHandler.addEventSource(
+      new lambdaEventSource.SqsEventSource(orderEventsQueue, {
+        batchSize: 5,
+        enabled: true,
+        maxBatchingWindow: cdk.Duration.minutes(1),
+      })
+    );
 
     orderEventsQueue.grantConsumeMessages(orderEmailsHandler);
 
     const orderEmailSESPolicy = new iam.PolicyStatement({
       effect: iam.Effect.ALLOW,
       actions: ["ses:SendEmail", "ses:SendRawEmail"],
-      resources: ["*"]
+      resources: ["*"],
     });
 
     orderEmailsHandler.addToRolePolicy(orderEmailSESPolicy);
 
     this.orderEventsFetchHandler = new lambdaNodeJS.NodejsFunction(
-      this, 
-      "OrderEventsFetchFunction", 
+      this,
+      "OrderEventsFetchFunction",
       {
         runtime: lambda.Runtime.NODEJS_20_X,
         functionName: "OrderEventsFetchFunction",
@@ -275,22 +349,22 @@ export class OrdersAppStack extends cdk.Stack {
         timeout: cdk.Duration.seconds(2),
         bundling: {
           minify: true,
-          sourceMap: false
+          sourceMap: false,
         },
         environment: {
-          EVENTS_DB: props.eventsDB.tableName
+          EVENTS_DB: props.eventsDB.tableName,
         },
         layers: [orderEventsRepositoryLayer],
         tracing: lambda.Tracing.ACTIVE,
-        insightsVersion: lambda.LambdaInsightsVersion.VERSION_1_0_119_0
+        insightsVersion: lambda.LambdaInsightsVersion.VERSION_1_0_119_0,
       }
     );
 
     const eventsFetchDBPolicy = new iam.PolicyStatement({
       effect: iam.Effect.ALLOW,
       actions: ["dynamodb:Query"],
-      resources: [`${props.eventsDB.tableArn}/index/emailIndex`]
-    })
+      resources: [`${props.eventsDB.tableArn}/index/emailIndex`],
+    });
 
     this.orderEventsFetchHandler.addToRolePolicy(eventsFetchDBPolicy);
   }

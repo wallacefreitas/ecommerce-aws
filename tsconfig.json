@@ -2,10 +2,7 @@
   "compilerOptions": {
     "target": "ES2020",
     "module": "commonjs",
-    "lib": [
-      "es2020",
-      "dom"
-    ],
+    "lib": ["es2020", "dom"],
     "declaration": true,
     "strict": true,
     "noImplicitAny": true,
@@ -20,9 +17,7 @@
     "inlineSources": true,
     "experimentalDecorators": true,
     "strictPropertyInitialization": false,
-    "typeRoots": [
-      "./node_modules/@types"
-    ],
+    "typeRoots": ["./node_modules/@types"],
     "baseUrl": "./",
     "paths": {
       "/opt/nodejs/productsLayer": [
@@ -52,10 +47,10 @@
       "/opt/nodejs/invoiceRepository": [
         "lambda/invoices/layers/invoiceRepository/nodejs/invoiceRepository"
       ],
+      "/opt/nodejs/authUserInfo": [
+        "lambda/auth/layers/authUserInfo/nodejs/authUserInfo"
+      ]
     }
   },
-  "exclude": [
-    "node_modules",
-    "cdk.out"
-  ]
+  "exclude": ["node_modules", "cdk.out"]
 }

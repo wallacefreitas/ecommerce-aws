@@ -1,22 +1,39 @@
-import { APIGatewayProxyEvent, APIGatewayProxyResult, Context } from "aws-lambda";
-import { DynamoDB, Lambda } from "aws-sdk";
+import {
+  APIGatewayProxyEvent,
+  APIGatewayProxyResult,
+  Context,
+} from "aws-lambda";
+import { CognitoIdentityServiceProvider, DynamoDB, Lambda } from "aws-sdk";
 import { Product, ProductRepository } from "/opt/nodejs/productsLayer";
 import { ProductEvent, ProductEventType } from "/opt/nodejs/productEventsLayer";
+import { AuthInfoService } from "/opt/nodejs/authUserInfo";
 
 const productsDB = process.env.PRODUCTS_TABLE!;
 const productEventsFunctionName = process.env.PRODUCT_EVENTS_FUNCTION_NAME!;
 
 const dbClient = new DynamoDB.DocumentClient();
 const lambdaClient = new Lambda();
+const cognitoIdentityServiceProvider = new CognitoIdentityServiceProvider();
 
 const repository = new ProductRepository(dbClient, productsDB);
 
-export async function handler(event: APIGatewayProxyEvent, context: Context): Promise<APIGatewayProxyResult> {
+const authInfoService = new AuthInfoService(cognitoIdentityServiceProvider);
+
+export async function handler(
+  event: APIGatewayProxyEvent,
+  context: Context
+): Promise<APIGatewayProxyResult> {
   const { resource, httpMethod, body } = event;
   const lambdaRequestId = context.awsRequestId;
   const apiRequestId = event.requestContext.requestId;
 
-  console.log(`API Gateway RequestId: ${apiRequestId} - Lambda RequestId: ${lambdaRequestId}`)
+  console.log(
+    `API Gateway RequestId: ${apiRequestId} - Lambda RequestId: ${lambdaRequestId}`
+  );
+
+  const userEmail = await authInfoService.getUserInfo(
+    event.requestContext.authorizer
+  );
 
   if (resource === "/products") {
     console.log("POST /products");
@@ -25,9 +42,9 @@ export async function handler(event: APIGatewayProxyEvent, context: Context): Pr
     const productCreated = await repository.create(product);
 
     const response = await sendProductEvent(
-      productCreated, 
+      productCreated,
       ProductEventType.CREATED,
-      "admin-created@test.com",
+      userEmail,
       lambdaRequestId
     );
 
@@ -35,8 +52,8 @@ export async function handler(event: APIGatewayProxyEvent, context: Context): Pr
 
     return {
       statusCode: 201,
-      body: JSON.stringify(productCreated)
-    }
+      body: JSON.stringify(productCreated),
+    };
   } else if (resource === "/products/{id}") {
     const productId = event.pathParameters!.id as string;
 
@@ -48,9 +65,9 @@ export async function handler(event: APIGatewayProxyEvent, context: Context): Pr
         const productUpdated = await repository.update(productId, product);
 
         const response = await sendProductEvent(
-          productUpdated, 
+          productUpdated,
           ProductEventType.UPDATED,
-          "admin-updated@test.com",
+          userEmail,
           lambdaRequestId
         );
 
@@ -58,17 +75,16 @@ export async function handler(event: APIGatewayProxyEvent, context: Context): Pr
 
         return {
           statusCode: 200,
-          body: JSON.stringify(productUpdated)
-        }
-      } catch(ConditionalCheckFailedException) {
+          body: JSON.stringify(productUpdated),
+        };
+      } catch (ConditionalCheckFailedException) {
         return {
           statusCode: 404,
           body: JSON.stringify({
-            message: "Product not found"
-          })
-        }
+            message: "Product not found",
+          }),
+        };
       }
-      
     } else if (httpMethod === "DELETE") {
       console.log(`DELETE /products/${productId}`);
 
@@ -76,9 +92,9 @@ export async function handler(event: APIGatewayProxyEvent, context: Context): Pr
         const product = await repository.remove(productId);
 
         const response = await sendProductEvent(
-          product, 
+          product,
           ProductEventType.DELETED,
-          "admin-deleted@test.com",
+          userEmail,
           lambdaRequestId
         );
 
@@ -86,14 +102,14 @@ export async function handler(event: APIGatewayProxyEvent, context: Context): Pr
 
         return {
           statusCode: 200,
-          body: JSON.stringify(product)
-        }
+          body: JSON.stringify(product),
+        };
       } catch (error) {
         console.error((<Error>error).message);
         return {
           statusCode: 404,
-          body: (<Error>error).message
-        }
+          body: (<Error>error).message,
+        };
       }
     }
   }
@@ -101,24 +117,31 @@ export async function handler(event: APIGatewayProxyEvent, context: Context): Pr
   return {
     statusCode: 400,
     body: JSON.stringify({
-      message: "Bad request"
-    })
-  }
+      message: "Bad request",
+    }),
+  };
 }
 
-function sendProductEvent(product: Product, eventType: ProductEventType, email: string, lambdaRequestId: string) {
+function sendProductEvent(
+  product: Product,
+  eventType: ProductEventType,
+  email: string,
+  lambdaRequestId: string
+) {
   const event: ProductEvent = {
     email,
     eventType,
     productCode: product.code,
     productId: product.id,
     productPrice: product.price,
-    requestId: lambdaRequestId
-  }
+    requestId: lambdaRequestId,
+  };
 
-  return lambdaClient.invoke({
-    FunctionName: productEventsFunctionName,
-    Payload: JSON.stringify(event),
-    InvocationType: "Event"
-  }).promise();
+  return lambdaClient
+    .invoke({
+      FunctionName: productEventsFunctionName,
+      Payload: JSON.stringify(event),
+      InvocationType: "Event",
+    })
+    .promise();
 }
